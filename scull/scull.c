@@ -1,13 +1,9 @@
-#include<linux/module.h>
-#include<linux/init.h>
-#include<linux/slab.h>
-#include<linux/err.h>
-#include<linux/fs.h>
 #include "scull.h"
 
 scull_dev *scull_dev_list = 0;
 dev_t dev = 0;
 int major_dev = MAJOR_DEV;
+extern struct proc_ops proc_ops;
 
 int scull_open(struct inode *inode, struct file *filp)
 {
@@ -45,7 +41,8 @@ ssize_t scull_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
 
 ssize_t scull_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos)
 {
-    scull_dev *scull_dev_p = filp->private_data;
+    scull_dev *scull_dev_p;
+    scull_dev_p = filp->private_data;
 
     if(*f_pos >= SCULL_BUF_SIZE)
         return 0;
@@ -63,8 +60,7 @@ ssize_t scull_write(struct file *filp, const char __user *buf, size_t count, lof
     return count;
 }
 
-const struct file_operations fops = 
-{
+const struct file_operations fops = {
     .owner = THIS_MODULE,
     .open = scull_open,
     .release = scull_release,
@@ -83,7 +79,7 @@ int scull_init(void)
     scull_dev_list = kmalloc(SCULL_CNT * sizeof(scull_dev), GFP_KERNEL);
     if(!scull_dev_list)
     {
-        printk(KERN_ALERT"kmalloc scull_dev_list fail.");
+        printk(KERN_ALERT"kmalloc scull_dev_list fail.\n");
         return -ENOMEM;
     }
     memset(scull_dev_list, 0, SCULL_CNT * sizeof(scull_dev));
@@ -93,7 +89,7 @@ int scull_init(void)
         scull_dev_list[i].buf = kmalloc(SCULL_BUF_SIZE, GFP_KERNEL);
         if(!scull_dev_list[i].buf)
         {
-            printk(KERN_ALERT"kmalloc scull_buf fail.");
+            printk(KERN_ALERT"kmalloc scull_buf fail.\n");
             scull_exit();
             return -ENOMEM;
         }
@@ -102,7 +98,7 @@ int scull_init(void)
     ret = alloc_chrdev_region(&dev, MINOR_DEV, SCULL_CNT, SCULL_NAME);
     if(ret)
     {
-        printk(KERN_ALERT"alloc chrdev region fail.");
+        printk(KERN_ALERT"alloc chrdev region fail.\n");
         scull_exit();
         return -EFAULT;
     }
@@ -117,14 +113,15 @@ int scull_init(void)
         ret = cdev_add(&scull_dev_list[i].cdev, num, 1);
         if(ret)
         {
-            printk(KERN_ALERT"cdev add fail.");
+            printk(KERN_ALERT"cdev add fail.\n");
             scull_exit();
             return -EFAULT;
         }
         scull_dev_list[i].init = 1;
     }
 
-    printk(KERN_ALERT"scull init successful.");
+    proc_create(SCULL_NAME, 0, NULL, &proc_ops);
+    printk(KERN_ALERT"scull init successful.\n");
     return 0;
 }
 
@@ -148,9 +145,10 @@ void scull_exit(void){
             unregister_chrdev_region(dev, SCULL_CNT);
 
         kfree(scull_dev_list);
+        remove_proc_entry(SCULL_NAME, NULL);
     }   
 
-    printk(KERN_ALERT"scull exit.");
+    printk(KERN_ALERT"scull exit.\n");
 }
 
 module_init(scull_init);

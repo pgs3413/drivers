@@ -6,7 +6,7 @@ OBJ_FILES ?= $(patsubst %.c,%.o,$(SRC_FILES))
 $(ko)-objs := $(OBJ_FILES)
 
 all:
-	$(MAKE) -C $(KERN_DIR) M=$(PWD) OBJ_FILES=$(OBJ_FILES) modules
+	$(MAKE) -C $(KERN_DIR) M=$(PWD) OBJ_FILES="$(OBJ_FILES)" modules
 
 clean:
 	@rm -f ./.*.cmd
