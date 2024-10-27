@@ -10,11 +10,13 @@
 #include<linux/err.h>
 #include<linux/fs.h>
 #include<linux/string.h>
+#include<linux/semaphore.h>
 
 typedef struct {
     char *buf;
     size_t size;
     unsigned char init;
+    struct semaphore sem;
     struct cdev cdev;
 } scull_dev;
 

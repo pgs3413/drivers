@@ -12,8 +12,13 @@ int scull_open(struct inode *inode, struct file *filp)
     filp->private_data = scull_dev_p;
 
     if((filp->f_flags & O_ACCMODE) == O_WRONLY)
+    {
+        if(down_interruptible(&scull_dev_p->sem))
+            return -ERESTARTSYS;
         scull_dev_p->size = 0;
-
+        up(&scull_dev_p->sem);
+    }
+        
     return 0;
 }
 
@@ -26,16 +31,34 @@ ssize_t scull_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
 {
     scull_dev *scull_dev_p = filp->private_data;
 
+    if(down_interruptible(&scull_dev_p->sem))
+        return -ERESTARTSYS;
+
+
     if(*f_pos >= scull_dev_p->size)
+    {
+        // printk(KERN_ALERT"exit read region\n");
+        up(&scull_dev_p->sem);
         return 0;
+    }
+
+    printk(KERN_ALERT"enter read region: size: %ld f_pos : %lld\n", scull_dev_p->size, *f_pos);
 
     if(*f_pos + count > scull_dev_p->size)
         count = scull_dev_p->size - *f_pos;
 
+    printk(KERN_ALERT"enter read region: size: %ld count : %ld char: %c\n", scull_dev_p->size, count, scull_dev_p->buf[0]);
+
     if(copy_to_user(buf, scull_dev_p->buf + *f_pos, count))
+    {
+        up(&scull_dev_p->sem);
         return -EFAULT;
+    }
 
     *f_pos += count;
+
+    // printk(KERN_ALERT"exit read region\n");
+    up(&scull_dev_p->sem);
     return count;
 }
 
@@ -44,19 +67,32 @@ ssize_t scull_write(struct file *filp, const char __user *buf, size_t count, lof
     scull_dev *scull_dev_p;
     scull_dev_p = filp->private_data;
 
+    if(down_interruptible(&scull_dev_p->sem))
+        return -ERESTARTSYS;
+
+    // printk(KERN_ALERT"enter write region: size: %ld f_pos : %lld\n", scull_dev_p->size, *f_pos);
+
     if(*f_pos >= SCULL_BUF_SIZE)
+    {
+        up(&scull_dev_p->sem);
         return 0;
+    }
 
     if(*f_pos + count > SCULL_BUF_SIZE)
         count = SCULL_BUF_SIZE - *f_pos;
 
     if(copy_from_user(scull_dev_p->buf + *f_pos, buf, count))
-        return EFAULT;
+    {
+        up(&scull_dev_p->sem);
+        return -EFAULT;
+    }
 
     *f_pos += count;
     if(scull_dev_p->size < *f_pos)
         scull_dev_p->size = *f_pos;
 
+    // printk(KERN_ALERT"exit write region\n");
+    up(&scull_dev_p->sem);
     return count;
 }
 
@@ -93,6 +129,7 @@ int scull_init(void)
             scull_exit();
             return -ENOMEM;
         }
+        sema_init(&scull_dev_list[i].sem, 1);
     }
 
     ret = alloc_chrdev_region(&dev, MINOR_DEV, SCULL_CNT, SCULL_NAME);
