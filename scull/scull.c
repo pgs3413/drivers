@@ -1,4 +1,5 @@
 #include "scull.h"
+#include "ioc.h"
 
 scull_dev *scull_dev_list = 0;
 dev_t dev = 0;
@@ -86,12 +87,52 @@ ssize_t scull_write(struct file *filp, const char __user *buf, size_t count, lof
     return count;
 }
 
+long scull_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+    size_t *sizep;
+    scull_dev *scull_dev_p;
+    scull_dev_p = filp->private_data;
+
+    switch(cmd)
+    {
+        case SCULL_CLEAR:
+
+            if(!capable(CAP_SYS_ADMIN))
+                return -EPERM;
+
+            if(down_interruptible(&scull_dev_p->sem))
+                return -ERESTARTSYS;
+            scull_dev_p->size = 0;
+            up(&scull_dev_p->sem);           
+            return 0;
+
+        case SCULL_GETSIZE:
+
+            sizep = (size_t *)arg;
+
+            if(!access_ok(sizep, sizeof(size_t)))
+                return -EFAULT;
+
+            if(down_interruptible(&scull_dev_p->sem))
+                return -ERESTARTSYS;
+            __put_user(scull_dev_p->size, sizep);
+            up(&scull_dev_p->sem);           
+            return 0;
+
+        default:
+            return -ENOTTY;        
+    }
+
+    return 0;
+}
+
 const struct file_operations fops = {
     .owner = THIS_MODULE,
     .open = scull_open,
     .release = scull_release,
     .read = scull_read,
-    .write = scull_write
+    .write = scull_write,
+    .unlocked_ioctl = scull_ioctl
 };
 
 void scull_exit(void);

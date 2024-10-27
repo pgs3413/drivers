@@ -11,6 +11,8 @@
 #include<linux/fs.h>
 #include<linux/string.h>
 #include<linux/semaphore.h>
+#include<linux/capability.h>
+#include<asm/uaccess.h>
 
 typedef struct {
     char *buf;
