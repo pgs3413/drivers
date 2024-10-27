@@ -34,20 +34,14 @@ ssize_t scull_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
     if(down_interruptible(&scull_dev_p->sem))
         return -ERESTARTSYS;
 
-
     if(*f_pos >= scull_dev_p->size)
     {
-        // printk(KERN_ALERT"exit read region\n");
         up(&scull_dev_p->sem);
         return 0;
     }
 
-    printk(KERN_ALERT"enter read region: size: %ld f_pos : %lld\n", scull_dev_p->size, *f_pos);
-
     if(*f_pos + count > scull_dev_p->size)
         count = scull_dev_p->size - *f_pos;
-
-    printk(KERN_ALERT"enter read region: size: %ld count : %ld char: %c\n", scull_dev_p->size, count, scull_dev_p->buf[0]);
 
     if(copy_to_user(buf, scull_dev_p->buf + *f_pos, count))
     {
@@ -57,7 +51,6 @@ ssize_t scull_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
 
     *f_pos += count;
 
-    // printk(KERN_ALERT"exit read region\n");
     up(&scull_dev_p->sem);
     return count;
 }
@@ -69,8 +62,6 @@ ssize_t scull_write(struct file *filp, const char __user *buf, size_t count, lof
 
     if(down_interruptible(&scull_dev_p->sem))
         return -ERESTARTSYS;
-
-    // printk(KERN_ALERT"enter write region: size: %ld f_pos : %lld\n", scull_dev_p->size, *f_pos);
 
     if(*f_pos >= SCULL_BUF_SIZE)
     {
@@ -91,7 +82,6 @@ ssize_t scull_write(struct file *filp, const char __user *buf, size_t count, lof
     if(scull_dev_p->size < *f_pos)
         scull_dev_p->size = *f_pos;
 
-    // printk(KERN_ALERT"exit write region\n");
     up(&scull_dev_p->sem);
     return count;
 }
