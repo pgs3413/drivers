@@ -4,3 +4,4 @@ test
 readpipe
 writepipe
 pollpipe
+asyncpipe

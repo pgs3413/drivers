@@ -7,12 +7,14 @@
 #include<linux/semaphore.h>
 #include<linux/slab.h>
 #include<linux/poll.h>
+#include<linux/signal.h>
 
 typedef struct {
     char *buf;
     size_t size;
     wait_queue_head_t readq, writeq;
     struct semaphore sem;
+    struct fasync_struct *async_queue;
 } scull_pipe_t;
 
 dev_t dev = 0;
@@ -21,6 +23,11 @@ scull_pipe_t scull_pipe;
 
 #define BUF_SIZE 4096
 
+int scullpipe_fasync(int fd, struct file *filp, int mode)
+{   
+    return fasync_helper(fd, filp, mode, &scull_pipe.async_queue);
+}
+
 int scullpipe_open(struct inode *inode, struct file *filp)
 {
     return 0;
@@ -28,6 +35,7 @@ int scullpipe_open(struct inode *inode, struct file *filp)
 
 int scullpipe_release(struct inode *inode, struct file *filp)
 {
+    scullpipe_fasync(-1, filp, 0);
     return 0;
 }
 
@@ -98,6 +106,9 @@ ssize_t scullpipe_write(struct file *filp, const char __user *buf, size_t count,
     wake_up_interruptible(&scull_pipe.readq);
     up(&scull_pipe.sem);
 
+    if(scull_pipe.async_queue)
+        kill_fasync(&scull_pipe.async_queue, SIGIO, POLL_IN);
+
     return count;
 }
 
@@ -131,7 +142,8 @@ struct file_operations fops = {
     .release = scullpipe_release,
     .read = scullpipe_read,
     .write = scullpipe_write,
-    .poll = scullpipe_poll
+    .poll = scullpipe_poll,
+    .fasync = scullpipe_fasync
 };
 
 void scullpipe_exit(void)
@@ -167,6 +179,7 @@ int scullpipe_init(void)
         return -ENOMEM;
     }
     scull_pipe.size = 0;
+    scull_pipe.async_queue = 0;
 
     sema_init(&scull_pipe.sem, 1);
 
