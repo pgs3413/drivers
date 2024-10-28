@@ -6,6 +6,7 @@
 #include<linux/wait.h>
 #include<linux/semaphore.h>
 #include<linux/slab.h>
+#include<linux/poll.h>
 
 typedef struct {
     char *buf;
@@ -100,11 +101,37 @@ ssize_t scullpipe_write(struct file *filp, const char __user *buf, size_t count,
     return count;
 }
 
+__poll_t scullpipe_poll(struct file *filp, struct poll_table_struct *pt)
+{
+
+    __poll_t mask = 0;
+    unsigned mode = filp->f_flags & O_ACCMODE;
+    unsigned read_mode = mode == O_RDONLY || mode == O_RDWR;
+    unsigned write_mode = mode == O_WRONLY || mode == O_RDWR;
+
+    down(&scull_pipe.sem);
+
+    if(read_mode)
+        poll_wait(filp, &scull_pipe.readq, pt);
+    if(write_mode)
+        poll_wait(filp, &scull_pipe.writeq, pt);
+    
+    if(scull_pipe.size != 0)
+        mask |= POLLIN | POLLRDNORM;
+    else
+        mask |= POLLOUT | POLLWRNORM;
+        
+    up(&scull_pipe.sem);
+
+    return mask;
+}
+
 struct file_operations fops = {
     .open = scullpipe_open,
     .release = scullpipe_release,
     .read = scullpipe_read,
-    .write = scullpipe_write
+    .write = scullpipe_write,
+    .poll = scullpipe_poll
 };
 
 void scullpipe_exit(void)
