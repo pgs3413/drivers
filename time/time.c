@@ -4,6 +4,7 @@
 #include <linux/seq_file.h>
 #include<linux/jiffies.h>
 #include<asm/msr.h>
+#include<linux/sched.h>
 
 unsigned long last;
 
@@ -46,10 +47,37 @@ static const struct proc_ops ops = {
     .proc_release = seq_release
 };
 
+static int delay_show(struct seq_file *m, void *v) 
+{
+    unsigned long start, end;
+
+    start = jiffies;
+    set_current_state(TASK_UNINTERRUPTIBLE);
+    schedule_timeout(HZ);
+    end = jiffies;
+
+    seq_printf(m, "%ld  %ld\n", start, end);
+
+    return 0;
+}
+
+static int delay_open(struct inode *inode, struct file *file) 
+{
+    return single_open(file, delay_show, NULL);
+}
+
+static const struct proc_ops delay_ops = {
+    .proc_open = delay_open,
+    .proc_read = seq_read,
+    .proc_lseek = seq_lseek,
+    .proc_release = seq_release
+};
+
 int time_init(void)
 {
     last = jiffies;
     proc_create("time", 0, NULL, &ops);
+    proc_create("delay", 0, NULL, &delay_ops);
     printk(KERN_ALERT"/proc/time init successful\n");
     return 0;
 }
@@ -57,6 +85,7 @@ int time_init(void)
 void time_exit(void)
 {
     remove_proc_entry("time", NULL);
+    remove_proc_entry("delay", NULL);
 }
 
 module_init(time_init);
