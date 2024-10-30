@@ -22,6 +22,9 @@ struct cdev cdev;
 scull_dev *scull_dev_list = NULL;
 spinlock_t list_lock = __SPIN_LOCK_UNLOCKED(list_lock);
 
+struct kmem_cache *scull_dev_cache;
+struct kmem_cache *scull_buf_cache;
+
 scull_dev *search_scull_dev(void)
 {
     scull_dev *scull_dev_p = NULL, *cur;
@@ -45,14 +48,15 @@ scull_dev *search_scull_dev(void)
     if(scull_dev_p)
         goto out;
 
-    scull_dev_p = kmalloc(sizeof(scull_dev), GFP_KERNEL);
+    scull_dev_p = kmem_cache_alloc(scull_dev_cache, GFP_KERNEL);
     if(!scull_dev_p)
         goto out;
+    scull_dev_p->buf = NULL;
 
-    scull_dev_p->buf = kmalloc(BUF_SIZE, GFP_KERNEL);
+    scull_dev_p->buf = kmem_cache_alloc(scull_buf_cache, GFP_KERNEL);
     if(!scull_dev_p->buf)
     {
-        kfree(scull_dev_p);
+        kmem_cache_free(scull_dev_cache, scull_dev_p);
         scull_dev_p = NULL;
         goto out;
     }
@@ -137,20 +141,23 @@ struct file_operations fops = {
 void scullpriv_exit(void)
 {
     scull_dev *cur = scull_dev_list, *next;
-    
+
+    cdev_del(&cdev);
+    if(dev)
+        unregister_chrdev_region(dev, 1);
+
     scull_dev_list = NULL;
     while(cur)
     {
         next = cur->next;
         if(cur->buf)
-            kfree(cur->buf);
-        kfree(cur);
+            kmem_cache_free(scull_buf_cache, cur->buf);
+        kmem_cache_free(scull_dev_cache, cur);
         cur = next;
     }
 
-    cdev_del(&cdev);
-    if(dev)
-        unregister_chrdev_region(dev, 1);
+    kmem_cache_destroy(scull_buf_cache);
+    kmem_cache_destroy(scull_dev_cache);
 
     printk(KERN_ALERT"scullpriv exit.\n");
 }
@@ -158,6 +165,22 @@ void scullpriv_exit(void)
 int scullpriv_init(void)
 {
     int ret;
+
+    scull_dev_cache = kmem_cache_create("scull_dev", sizeof(scull_dev), 0, 0, NULL);
+    if(!scull_dev_cache)
+    {
+        printk(KERN_ALERT"scull dev cache create fail.\n");
+        scullpriv_exit();
+        return -EFAULT;
+    }
+
+    scull_buf_cache = kmem_cache_create_usercopy("scull_buf", BUF_SIZE, 0, 0, 0, BUF_SIZE, NULL);
+    if(!scull_buf_cache)
+    {
+        printk(KERN_ALERT"scull buf cache create fail.\n");
+        scullpriv_exit();
+        return -EFAULT;
+    }
 
     ret = alloc_chrdev_region(&dev, 0, 1, "scullpriv");
     if(ret)
