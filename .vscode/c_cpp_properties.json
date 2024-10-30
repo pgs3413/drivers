@@ -14,7 +14,7 @@
                 "/usr/include"
             ],
             "defines": [
-                "__KERNAL__",
+                "__KERNEL__",
                 "MODULE"
             ],
             "compilerPath": "/usr/bin/gcc",
