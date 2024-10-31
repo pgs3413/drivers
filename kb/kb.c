@@ -3,6 +3,7 @@
 #include<linux/proc_fs.h>
 #include<linux/seq_file.h>
 #include<asm/io.h>
+#include<linux/ioport.h>
 
 int data_port = 0x60;
 int cmd_port = 0x64;
@@ -98,6 +99,12 @@ const struct proc_ops kb_ops = {
 
 int kb_init(void)
 {
+    struct resource *resource;
+
+    resource = request_region(0x60, 1, "kb");
+    if(!resource)
+        printk(KERN_ALERT"can`t get I/O address 0x60\n");
+
     proc_create("kb", 0, NULL, &kb_ops);
     printk(KERN_ALERT"kb init successful\n");
     return 0;
