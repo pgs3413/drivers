@@ -5,3 +5,4 @@ readpipe
 writepipe
 pollpipe
 asyncpipe
+kb_led
