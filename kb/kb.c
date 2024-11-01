@@ -4,10 +4,15 @@
 #include<linux/seq_file.h>
 #include<asm/io.h>
 #include<linux/ioport.h>
+#include<linux/interrupt.h>
+#include<linux/wait.h>
+#include<linux/atomic.h>
 
 int data_port = 0x60;
 int cmd_port = 0x64;
 unsigned char led_status = 0;
+wait_queue_head_t wq;
+atomic_t flag;
 
 // static void write_64(unsigned char cmd)
 // {
@@ -77,11 +82,18 @@ static int kb_show(struct seq_file *m, void *v)
         led_status = 0;
     else 
         led_status = 0x07;
-    led_response = set_led(led_status);
-    if(led_response)
-        seq_printf(m, "set led fail.\n");
-    else
-        seq_printf(m, "set led successful.\n");
+    // led_response = set_led(led_status);
+    // if(led_response)
+    //     seq_printf(m, "set led fail.\n");
+    // else
+    //     seq_printf(m, "set led successful.\n");
+
+    atomic_set(&flag, 0);
+    wait_event_interruptible(wq, (atomic_read(&flag) != 0));
+    atomic_set(&flag, 0);
+
+    seq_printf(m, "good!\n");
+
     return 0;
 }
 
@@ -97,13 +109,31 @@ const struct proc_ops kb_ops = {
     .proc_release = seq_release
 };
 
+irqreturn_t kb_irq_handler(int irq, void *wq)
+{
+    printk(KERN_ALERT"receive a interrupt irq: %d\n", irq);
+    atomic_set(&flag, 1);
+    wake_up_interruptible(wq);
+    return IRQ_NONE;
+}
+
 int kb_init(void)
 {
     struct resource *resource;
+    int ret;
 
     resource = request_region(0x60, 1, "kb");
     if(!resource)
         printk(KERN_ALERT"can`t get I/O address 0x60\n");
+
+    ret = request_irq(1, kb_irq_handler, IRQF_SHARED, "kb", &wq);
+    if(ret)
+        printk(KERN_ALERT"can`t request irq 1\n");
+    else
+        printk(KERN_ALERT"request irq 1 successful.\n");
+
+    init_waitqueue_head(&wq);
+    atomic_set(&flag, 0);
 
     proc_create("kb", 0, NULL, &kb_ops);
     printk(KERN_ALERT"kb init successful\n");
@@ -112,7 +142,9 @@ int kb_init(void)
 
 void kb_exit(void)
 {
+    free_irq(1, &wq);
     remove_proc_entry("kb", NULL);
+    printk(KERN_ALERT"kb exit.\n");
 }
 
 module_init(kb_init);
