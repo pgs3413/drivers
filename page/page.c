@@ -65,7 +65,7 @@ unsigned long page_address_cal(struct page *page)
     printk(KERN_ALERT"index: %ld physical_addr: %lx PAGE_OFFSET: %lx virtual_addr: %lx\n",
         index, physical_addr, PAGE_OFFSET, virtual_addr);
 
-    printk(KERN_ALERT"kernel code address: %lx\n", (unsigned long)alloc_pages);
+    // printk(KERN_ALERT"kernel code address: %lx\n", (unsigned long)alloc_pages);
 
     return virtual_addr;
 }
@@ -85,18 +85,54 @@ void page_macro(void)
     VMEMMAP_START, sizeof(struct page), VMALLOC_SIZE_TB);
 }
 
+void page_vmalloc(void)
+{
+    char *vaddr;
+    unsigned long addr;
+    struct page *vpage;
+    int size;
+
+    vaddr = vmalloc(4096);
+    if(!vaddr)
+    {
+        printk(KERN_ALERT"vmalloc fail.\n");
+        return;
+    }
+
+    printk(KERN_ALERT"vmalloc addr: %px\n", vaddr);
+    vpage = vmalloc_to_page(vaddr);
+    addr = page_address_cal(vpage);
+
+    size = sprintf(vaddr, "HELLO,VMALLOC!");
+    vaddr[size] = '\0';
+
+    printk(KERN_ALERT"msg: %s\n", (char *)addr);
+
+    page_table((unsigned long)vaddr);
+
+    vfree(vaddr);
+
+}
+
 int page_init(void)
 {
     unsigned long addr;
     struct page *page;
     page = alloc_pages(GFP_KERNEL, 0);
+
     page_table((unsigned long)page);
+    printk(KERN_ALERT"flags: %lx\n", page->flags);
+    page_table((unsigned long)page);    
+
     addr = page_address_cal(page);
     page_print((char *)addr);
     page_table(addr);
     page_macro();
     
     __free_pages(page, 0);
+
+    page_vmalloc();
+
     printk(KERN_ALERT"page init successful.\n");
     return 0;
 }
