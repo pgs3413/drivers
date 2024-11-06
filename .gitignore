@@ -6,3 +6,5 @@ writepipe
 pollpipe
 asyncpipe
 kb_led
+scullm_write
+scullm_read
