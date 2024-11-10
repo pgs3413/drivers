@@ -8,3 +8,5 @@ asyncpipe
 kb_led
 scullm_write
 scullm_read
+write_block
+read_block
