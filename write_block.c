@@ -59,5 +59,9 @@ int main(int argc, char *argv[])
 
     printf("msg: %s\n", buf2 + sizeof(int));
 
+    printf("press any key...\n");
+    char c;
+    scanf("%c", &c);
+
     return 0;
 }
