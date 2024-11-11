@@ -67,7 +67,6 @@ blk_status_t sbull_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queu
         sbull_submit_bio(bio);
 
     blk_mq_end_request(req, BLK_STS_OK);
-    
     pr_alert("a request done\n");
     return BLK_STS_OK;
 }
