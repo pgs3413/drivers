@@ -10,3 +10,4 @@ scullm_write
 scullm_read
 write_block
 read_block
+send_packet
