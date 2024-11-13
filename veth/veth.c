@@ -74,14 +74,51 @@ netdev_tx_t	veth_xmit(struct sk_buff *skb, struct net_device *dev)
     return NETDEV_TX_OK;
 }
 
+/*
+    构建ether协议帧头
+*/
+int veth_header(struct sk_buff *skb, struct net_device *dev,
+	       unsigned short type,
+	       const void *daddr, const void *saddr, unsigned int len)
+{
+	struct ethhdr *eth = skb_push(skb, ETH_HLEN);
+
+	eth->h_proto = htons(type);
+
+	if (!saddr)
+		saddr = dev->dev_addr;
+	memcpy(eth->h_source, saddr, ETH_ALEN);
+
+	if (daddr) 
+    {
+        if(((char *)daddr)[0] == 0x01)
+            daddr = "\x06\x05\x04\x03\x02\x01";
+
+		memcpy(eth->h_dest, daddr, ETH_ALEN);
+		return ETH_HLEN;
+	}
+
+	return -ETH_HLEN;
+}
+
 int veth_open(struct net_device *dev)
 {
+    struct header_ops *temp_ops;
+    
+    temp_ops = kmalloc(sizeof(struct header_ops), GFP_KERNEL);
+    memcpy(temp_ops, dev->header_ops, sizeof(struct header_ops));
+    temp_ops->create = veth_header;
+    dev->header_ops = temp_ops;
+
+    memcpy(dev->dev_addr, "\x01\x02\x03\x04\x05\x06", 6);
+    
     pr_alert("vdev up.\n");
     return 0;
 }
 
 int veth_stop(struct net_device *dev)
 {
+    kfree(dev->header_ops);
     pr_alert("vdev stop.\n");
     return 0;
 }
@@ -92,13 +129,13 @@ const struct net_device_ops veth_ops = {
     .ndo_start_xmit = veth_xmit
 };
 
+
 void veth_setup(struct net_device *dev)
 {
     ether_setup(dev);
     dev->flags		= IFF_NOARP;
 	dev->priv_flags	= 0;
     dev->netdev_ops = &veth_ops;
-    memcpy(dev->dev_addr, "\x01\x02\x03\x04\x05\x06", 6);
 }
 
 void veth_exit(void)
