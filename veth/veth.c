@@ -6,6 +6,7 @@
 #include<linux/ip.h>
 #include<linux/tcp.h>
 #include<linux/udp.h>
+#include<linux/icmp.h>
 #include<linux/inet.h>
 
 struct net_device *veth;
@@ -14,18 +15,14 @@ void print_skb(struct sk_buff *skb)
 {
     struct ethhdr *ethhdr;
     struct iphdr *iphdr;
-    char *proto_name;
     
     ethhdr = eth_hdr(skb);
     pr_alert("src mac: %pM dest mac: %pM ether type: 0x%04x\n",
         ethhdr->h_source, ethhdr->h_dest, ntohs(ethhdr->h_proto));
 
     iphdr = ip_hdr(skb);
-    proto_name = 
-        iphdr->protocol == IPPROTO_TCP ? "TCP" : 
-         iphdr->protocol == IPPROTO_UDP ? "UDP" : "OTHER";
-    pr_alert("src ip: %pI4 dest ip: %pI4 protocol: %s\n",
-        &iphdr->saddr, &iphdr->daddr, proto_name);
+    pr_alert("src ip: %pI4 dest ip: %pI4 protocol: %d\n",
+        &iphdr->saddr, &iphdr->daddr, iphdr->protocol);
 
     if(iphdr->protocol == IPPROTO_UDP)
     {
@@ -36,18 +33,60 @@ void print_skb(struct sk_buff *skb)
         udphdr = udp_hdr(skb);
         size = ntohs(udphdr->len) - 8;
 
-        pr_alert("src port: %u dest port: %u payload size: %d\n",
-            ntohs(udphdr->source), ntohs(udphdr->dest), size);
-
         payload = kmalloc(size + 1, GFP_KERNEL);
         memcpy(payload, (char *)udphdr + 8, size);
         payload[size] = '\0';
 
-        pr_alert("payload: %s\n", payload);
+        pr_alert("UDP src port: %u dest port: %u payload size: %d payload: %s\n",
+            ntohs(udphdr->source), ntohs(udphdr->dest), size, payload);
         kfree(payload);
     }
 
+    if(iphdr->protocol == IPPROTO_ICMP)
+    {
+        struct icmphdr *icmp = icmp_hdr(skb);
+        pr_alert("ICMP type: %d code: %d\n", icmp->type, icmp->code);
+    }
+
 }
+
+/*
+    反转数据包：veth -> remote => remote -> veth
+*/
+struct sk_buff *reverse_skb(struct sk_buff *skb)
+{
+    struct sk_buff *new_skb;
+    struct ethhdr *eth, *new_eth;
+    struct iphdr *ip, *new_ip;
+
+    new_skb = dev_alloc_skb(skb->len + 2);
+    if(!new_skb)
+    {
+        pr_alert("dev_alloc_skb failed.\n");
+        return NULL;
+    }
+
+    skb_reserve(new_skb, 2); //align IP on 16B boundary
+    skb_put(new_skb, skb->len);
+    memcpy(new_skb->data, skb->data, skb->len);
+
+    //反转mac地址
+    eth = eth_hdr(skb);
+    new_eth = (struct ethhdr*)(new_skb->data);
+    memcpy(new_eth->h_source, eth->h_dest, ETH_ALEN);
+    memcpy(new_eth->h_dest, eth->h_source, ETH_ALEN);
+
+    //反转IP
+    ip = ip_hdr(skb);
+    new_ip = (struct iphdr*)((char *)new_eth + ETH_HLEN);
+    memcpy(&new_ip->saddr, &ip->daddr, 4);
+    memcpy(&new_ip->daddr, &ip->saddr, 4);
+    //rebuild checksum (ip needs it.)
+    new_ip->check = 0;
+    new_ip->check = ip_fast_csum(new_ip, new_ip->ihl); 
+
+    return new_skb;
+} 
 
 /*
     skb 是一个完整的以太网帧
@@ -55,9 +94,11 @@ void print_skb(struct sk_buff *skb)
 netdev_tx_t	veth_xmit(struct sk_buff *skb, struct net_device *dev)
 {
     struct ethhdr* ethhdr = eth_hdr(skb);
+    struct sk_buff *new_skb;
 
-    if(ethhdr->h_dest[0] == 0xff || 
-        (ethhdr->h_dest[0] == 0x33 && ethhdr->h_dest[1] == 0x33))
+    if(ethhdr->h_dest[0] == 0xff 
+    || (ethhdr->h_dest[0] == 0x33 && ethhdr->h_dest[1] == 0x33)
+    || ntohs(ethhdr->h_proto) != 0x0800)// 非IPV4协议
     {
         dev_kfree_skb(skb);
         return NETDEV_TX_OK;
@@ -67,10 +108,26 @@ netdev_tx_t	veth_xmit(struct sk_buff *skb, struct net_device *dev)
     dev->stats.tx_bytes += skb->len;
 
     pr_alert("transmit a packet. len: %d task: %s\n", skb->len, current->comm);
-    if(ntohs(ethhdr->h_proto) == 0x0800) // IPV4协议
-        print_skb(skb);
+    print_skb(skb);
 
+    new_skb = reverse_skb(skb);
     dev_kfree_skb(skb);
+
+    if(!new_skb)
+    {
+        pr_alert("reverse_skb failed.\n");
+        return NETDEV_TX_BUSY;
+    }
+
+    dev->stats.rx_packets += 1;
+    dev->stats.rx_bytes += new_skb->len;
+
+    new_skb->protocol = eth_type_trans(new_skb, dev); //去掉以太网头
+    new_skb->ip_summed = CHECKSUM_UNNECESSARY;
+
+    if(netif_rx(new_skb) != NET_RX_SUCCESS) //提交给IP层
+        pr_alert("netif_rx failed.\n");
+
     return NETDEV_TX_OK;
 }
 
