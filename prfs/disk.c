@@ -3,6 +3,36 @@
 static pdir_t **pdir_arr;
 static pfile_t **pfile_arr;
 
+umode_t get_mode(unsigned short ino)
+{
+    umode_t mode = 0;
+    if(IS_PDIR(ino))
+    {
+        pdir_t *pdir = get_pdir(ino);
+        if(pdir)
+            mode = pdir->mode;
+    } else {
+        pfile_t *pfile = get_pfile(ino);
+        if(pfile)
+            mode = pfile->mode;
+    }
+    return mode;
+}
+
+unsigned long get_size(unsigned short ino)
+{
+    unsigned long size = 0;
+    if(IS_PDIR(ino))
+    {
+        size = 4096;
+    } else {
+        pfile_t *pfile = get_pfile(ino);
+        if(pfile)
+            size = pfile->size;
+    }
+    return size;
+}
+
 pdir_t *get_pdir(unsigned short ino)
 {
     if(ino > MAX_ENTRY_INO)
@@ -15,6 +45,101 @@ pfile_t *get_pfile(unsigned short ino)
     if(ino < MAX_ENTRY_INO || ino > 1024)
         return 0;
     return pfile_arr[ino - MAX_ENTRY_INO - 1];
+}
+
+char *get_page_from_pfile(pfile_t *pfile, unsigned int index)
+{
+    if(!pfile || index >= MAX_FILE_PAGE)
+        return 0;
+
+    if(!pfile->pages[index])
+        pfile->pages[index] = (char *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, 0);
+
+    return pfile->pages[index];    
+}
+
+void pfile_pages_truncate(pfile_t *pfile)
+{
+    int j;
+
+    if(!pfile)
+        return;
+
+    for(j = 0; j < MAX_FILE_PAGE; j++)
+        if(pfile->pages[j])
+        {
+            free_pages((unsigned long)pfile->pages[j], 0);
+            pfile->pages[j] = 0;
+        }
+            
+    pfile->size = 0;
+}
+
+void delete_pflie(unsigned short ino)
+{
+    pfile_t *pfile = get_pfile(ino);
+    if(!pfile)
+        return;
+
+    pfile_pages_truncate(pfile);
+    kfree(pfile);
+    pfile_arr[ino - MAX_ENTRY_INO - 1] = 0;
+}
+
+void delete_pdentry(pdir_t *pdir, const char *name)
+{
+    int i;
+    if(!pdir)
+        return;
+    
+    for(i = 0; i < MAX_DIR_ENTRY_SIZE; i++)
+        if(pdir->flags[i] && !strcmp(name, pdir->pdentry[i].name))
+        {
+            memset(&pdir->pdentry[i], 0, sizeof(pdentry_t));
+            pdir->flags[i] = 0;
+            break;
+        }
+}
+
+unsigned short disk_create_pfile(umode_t mode)
+{
+    int i;
+    for(i = 0; i < MAX_ENTRY_INO; i++)
+        if(!pfile_arr[i])
+            break;
+    if(i == MAX_ENTRY_INO)
+        return 0;
+
+    pfile_arr[i] = kmalloc(sizeof(pfile_t), GFP_KERNEL | __GFP_ZERO);
+    if(!pfile_arr[i])
+        return 0;
+
+    pfile_arr[i]->mode = mode | S_IFREG;
+    return i + MAX_ENTRY_INO + 1;
+}
+
+int disk_create_pdentry(pdir_t *pdir, unsigned short ino, const char *name)
+{
+    int i;
+
+    if(!pdir)
+        return -EFAULT;
+
+    if(!pdir->pdentry)
+        pdir->pdentry = (pdentry_t *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, 0);
+    if(!pdir->pdentry)
+        return -ENOMEM;
+
+    for(i = 0; i < MAX_DIR_ENTRY_SIZE; i++)
+        if(!pdir->flags[i])
+            break;
+    if(i == MAX_DIR_ENTRY_SIZE)
+        return -ENOMEM;
+
+    pdir->pdentry[i].ino = ino;
+    snprintf(pdir->pdentry[i].name, MAX_ENTRY_NAME_SIZE, name);
+    pdir->flags[i] = 1;
+    return 0;
 }
 
 pdentry_t *disk_lookup(unsigned short ino, const char *name)
@@ -34,7 +159,7 @@ pdentry_t *disk_lookup(unsigned short ino, const char *name)
 
 void disk_destroy(void)
 {
-    int i, j;
+    int i;
 
     if(!pfile_arr)
         goto pdir_arr_destroy;
@@ -43,11 +168,7 @@ void disk_destroy(void)
     {
         if(!pfile_arr[i])
             continue;
-
-         for(j = 0; j < MAX_FILE_PAGE; j++)
-            if(pfile_arr[i]->pages[j])
-                free_pages((unsigned long)pfile_arr[i]->pages[j], 0);
-
+        pfile_pages_truncate(pfile_arr[i]);
         kfree(pfile_arr[i]);
     }
 
@@ -105,7 +226,7 @@ int disk_init(umode_t root_mode, const char *root_filename, const char *root_con
         goto fail;
 
     root_dir->flags[0] = 1;
-    root_dir->mode = root_mode;
+    root_dir->mode = root_mode | S_IFDIR;
     root_dir->pdentry[0].ino = 513;
     snprintf(root_dir->pdentry[0].name, MAX_ENTRY_NAME_SIZE, root_filename);
 
@@ -122,7 +243,7 @@ int disk_init(umode_t root_mode, const char *root_filename, const char *root_con
     root_file->size = strlen(root_content);
     if(root_file->size > 4096)
         root_file->size = 4096;
-    root_file->mode = root_mode;
+    root_file->mode = root_mode | S_IFREG;
     snprintf(root_file->pages[0], 4096, root_content);
 
     // pr_alert("root file. ino: %d name: %s\n",

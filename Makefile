@@ -16,3 +16,4 @@ clean:
 	@rm -f ./*.symvers
 	@rm -rf ./*/.*.cmd
 	@rm -rf ./*/*.o
+	@rm -rf ./*/*.o.d

@@ -31,50 +31,58 @@ struct inode *get_inode(struct super_block *sb, const struct inode *dir, umode_t
 	return inode;
 }
 
-struct dentry *dir_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
+struct dentry *pdir_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
     pdentry_t *pdentry;
     struct inode *inode;
-    umode_t mode = 0;
-    unsigned long size = 0;
 
     // pr_alert("lookup inode_i_ino: %ld dentry_name: %s flags: %x\n",
     //     dir->i_ino, dentry->d_name.name, flags);
 
     pdentry = disk_lookup(dir->i_ino, dentry->d_name.name);
     if(!pdentry)
-    {
-        // pr_alert("file %s don`t exit.\n", dentry->d_name.name);
         return 0;
-    }
         
-
-    if(IS_PDIR(pdentry->ino))
-    {
-        pdir_t *pdir = get_pdir(pdentry->ino);
-        if(pdir)
-            mode = pdir->mode;
-        mode |= S_IFDIR;
-        size = 4096;
-    } else {
-        pfile_t *pfile = get_pfile(pdentry->ino);
-        if(pfile)
-            mode = pfile->mode;
-        mode |= S_IFREG;
-        size = pfile->size;
-    }
-
-    inode = get_inode(dir->i_sb, dir, mode, pdentry->ino, size);
+    inode = get_inode(dir->i_sb, dir, get_mode(pdentry->ino), pdentry->ino, get_size(pdentry->ino));
     d_add(dentry, inode);
-    pr_alert("file %s lookup successful.\n", dentry->d_name.name);
     return 0;
 }
 
+int pfile_create(struct user_namespace *mnt_userns, struct inode *dir, struct dentry *dentry, umode_t mode, bool excl)
+{
+    int ret;
+    struct inode *inode;
+    unsigned short ino = disk_create_pfile(mode);
+    if(!ino)
+        return -ENOMEM;
+
+    ret = disk_create_pdentry(get_pdir(dir->i_ino), ino, dentry->d_name.name);
+    if(ret)
+    {
+        delete_pflie(ino);
+        return -ENOMEM;
+    }
+
+    inode = get_inode(dir->i_sb, dir, mode | S_IFREG, ino, 0);
+    d_add(dentry, inode);
+    return 0;
+}
+
+int pfile_unlink(struct inode *dir, struct dentry *dentry)
+{
+    delete_pdentry(get_pdir(dir->i_ino), dentry->d_name.name);
+    delete_pflie(dentry->d_inode->i_ino);
+    drop_nlink(dentry->d_inode);
+    dput(dentry);
+    return 0;
+}
 
 struct inode_operations dir_inode_ops = {
-    .lookup = dir_lookup
+    .lookup = pdir_lookup,
+    .create = pfile_create,
+    .unlink = pfile_unlink
 };
 
-struct file_operations dir_file_ops = {
+struct inode_operations file_inode_ops = {
 
 };
