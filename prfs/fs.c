@@ -70,7 +70,7 @@ int prfs_fill_super(struct super_block *sb, struct fs_context *fc)
         return -ENOMEM;
     }
 
-    pr_alert("prfs_fill_super successful.\n");
+    // pr_alert("prfs_fill_super successful.\n");
     return 0;
 }
 
@@ -123,7 +123,7 @@ void prfs_kill_sb(struct super_block *sb)
 {
     disk_destroy();
     kill_litter_super(sb);
-    pr_alert("prfs_kill_sb successful.\n");
+    // pr_alert("prfs_kill_sb successful.\n");
 }
 
 struct file_system_type prfs_type = {
@@ -136,7 +136,8 @@ struct file_system_type prfs_type = {
 void prfs_exit(void)
 {
     unregister_filesystem(&prfs_type);
-    pr_alert("prfs exit.\n");
+    remove_proc_entry("pdentry", NULL);
+    // pr_alert("prfs exit.\n");
 }
 
 int prfs_init(void)
@@ -148,7 +149,8 @@ int prfs_init(void)
         return -EFAULT;
     }
 
-    pr_alert("prfs init sucessful.\n");
+    proc_create("pdentry", 0, NULL, &prfs_proc_ops);
+    // pr_alert("prfs init sucessful.\n");
     return 0;
 }
 

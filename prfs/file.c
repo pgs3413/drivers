@@ -1,5 +1,8 @@
 #include "prfs.h"
 
+/**
+ * open前dentry计数加一
+ */
 int pfile_open(struct inode *inode, struct file *filp)
 {
     pfile_t *pfile = get_pfile(inode->i_ino);
@@ -16,6 +19,9 @@ int pfile_open(struct inode *inode, struct file *filp)
     return 0;
 }
 
+/*
+* release后dentry计数会减一
+*/
 int pfile_release(struct inode *inode, struct file *filp)
 {
     return 0;

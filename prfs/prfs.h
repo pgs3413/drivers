@@ -5,6 +5,8 @@
 #include<linux/gfp.h>
 #include<linux/slab.h>
 #include<linux/uaccess.h>
+#include<linux/proc_fs.h>
+#include<linux/seq_file.h>
 
 #define MAX_GLOBAL_ENTRY_SIZE 512 //全局最多512个文件；全局最多512个目录
 #define MAX_DIR_ENTRY_SIZE 128 //每一个目录下最多129个子项
@@ -39,18 +41,25 @@ void pfile_pages_truncate(pfile_t *pfile);
 pdentry_t *disk_lookup(unsigned short ino, const char *name);
 unsigned short disk_create_pfile(umode_t mode);
 int disk_create_pdentry(pdir_t *pdir, unsigned short ino, const char *name);
+unsigned short disk_create_pdir(umode_t mode);
 void delete_pflie(unsigned short ino);
 void delete_pdentry(pdir_t *pdir, const char *name);
+void delete_pdir(unsigned short ino);
 
 pdir_t *get_pdir(unsigned short ino);
 pfile_t *get_pfile(unsigned short ino);
 umode_t get_mode(unsigned short ino);
 unsigned long get_size(unsigned short ino);
 char *get_page_from_pfile(pfile_t *pfile, unsigned int index);
+int disk_pdir_empty(pdir_t *pdir);
 
 extern struct file_operations dir_file_ops;
 extern struct inode_operations dir_inode_ops;
 extern struct file_operations file_ops;
 extern struct inode_operations file_inode_ops;
+extern struct dentry_operations dentry_ops;
+
+extern struct dentry *show_dentry;
+extern const struct proc_ops prfs_proc_ops;
 
 #endif

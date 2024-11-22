@@ -58,6 +58,20 @@ char *get_page_from_pfile(pfile_t *pfile, unsigned int index)
     return pfile->pages[index];    
 }
 
+int disk_pdir_empty(pdir_t *pdir)
+{
+    int i;
+
+    if(!pdir || !pdir->pdentry)
+        return 1;
+    
+    for(i = 0; i < MAX_DIR_ENTRY_SIZE; i++)
+        if(pdir->flags[i])
+            return 0;
+    
+    return 1;
+}
+
 void pfile_pages_truncate(pfile_t *pfile)
 {
     int j;
@@ -101,6 +115,18 @@ void delete_pdentry(pdir_t *pdir, const char *name)
         }
 }
 
+void delete_pdir(unsigned short ino)
+{
+    pdir_t *pdir = get_pdir(ino);
+    if(!pdir)
+        return;
+
+    if(pdir->pdentry)
+        free_pages((unsigned long)pdir->pdentry, 0);
+    kfree(pdir);
+    pdir_arr[ino - 1] = 0;
+}
+
 unsigned short disk_create_pfile(umode_t mode)
 {
     int i;
@@ -140,6 +166,23 @@ int disk_create_pdentry(pdir_t *pdir, unsigned short ino, const char *name)
     snprintf(pdir->pdentry[i].name, MAX_ENTRY_NAME_SIZE, name);
     pdir->flags[i] = 1;
     return 0;
+}
+
+unsigned short disk_create_pdir(umode_t mode)
+{
+    int i;
+    for(i = 0; i < MAX_ENTRY_INO; i++)
+        if(!pdir_arr[i])
+            break;
+    if(i == MAX_ENTRY_INO)
+        return 0;
+
+    pdir_arr[i] = kmalloc(sizeof(pdir_t), GFP_KERNEL | __GFP_ZERO);
+    if(!pdir_arr[i])
+        return 0;
+
+    pdir_arr[i]->mode = mode | S_IFDIR;
+    return i + 1;
 }
 
 pdentry_t *disk_lookup(unsigned short ino, const char *name)
