@@ -5,7 +5,7 @@
 
 int main() {
     
-    int fd = open("/home/pan/fs/prfs/a.txt", O_WRONLY | O_CREAT, 0660);
+    int fd = open("/home/pan/fs/prfs/root2", O_RDWR);
     if(fd == -1)
     {
         perror("open");

@@ -47,7 +47,7 @@ int prfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_op		= &sb_ops; // super block operations
 	sb->s_time_gran		= 1;
 
-    ret = disk_init(mode, "root.txt", "this is a root file.\n");
+    ret = disk_init(mode, "root1", "root2", "this is a root file.\n");
     if(ret)
     {
         pr_alert("disk_init failed.\n");

@@ -89,15 +89,31 @@ void pfile_pages_truncate(pfile_t *pfile)
     pfile->size = 0;
 }
 
-void delete_pflie(unsigned short ino)
+void delete_pfile(unsigned short ino)
 {
     pfile_t *pfile = get_pfile(ino);
     if(!pfile)
         return;
 
+    if(--pfile->nrlink)
+        return;
     pfile_pages_truncate(pfile);
     kfree(pfile);
     pfile_arr[ino - MAX_ENTRY_INO - 1] = 0;
+}
+
+void reino_pdentry(pdir_t *pdir, const char *name, unsigned short ino)
+{
+    int i;
+    if(!pdir)
+        return;
+    
+    for(i = 0; i < MAX_DIR_ENTRY_SIZE; i++)
+        if(pdir->flags[i] && !strcmp(name, pdir->pdentry[i].name))
+        {
+            pdir->pdentry[i].ino = ino;
+            break;
+        }
 }
 
 void delete_pdentry(pdir_t *pdir, const char *name)
@@ -141,6 +157,7 @@ unsigned short disk_create_pfile(umode_t mode)
         return 0;
 
     pfile_arr[i]->mode = mode | S_IFREG;
+    pfile_arr[i]->nrlink = 1;
     return i + MAX_ENTRY_INO + 1;
 }
 
@@ -237,16 +254,16 @@ void disk_destroy(void)
     free_pages((unsigned long)pdir_arr, 0);
     pdir_arr = 0;
 
-    // pr_alert("disk destroy\n");
-
     out:
     return;
 }
 
-int disk_init(umode_t root_mode, const char *root_filename, const char *root_content)
+int disk_init(umode_t root_mode, const char *root_filename1, const char *root_filename2, const char *root_content)
 {
     pdir_t *root_dir;
     pfile_t *root_file;
+    unsigned short dir_ino, file_ino;
+    char *page;
 
     pdir_arr = (pdir_t **)__get_free_pages(GFP_KERNEL | __GFP_ZERO, 0);
     if(!pdir_arr)
@@ -256,41 +273,32 @@ int disk_init(umode_t root_mode, const char *root_filename, const char *root_con
     if(!pfile_arr)
         goto fail;
 
-    //创建一个根目录（目录号为1）以及根文件（文件号为513）
-
-    pdir_arr[0] = kmalloc(sizeof(pdir_t), GFP_KERNEL | __GFP_ZERO);
-    if(!pdir_arr[0])
+    //创建一个根目录以及根文件（但是有两个硬链接）
+    file_ino = disk_create_pfile(root_mode);
+    if(!file_ino)
         goto fail;
 
-    root_dir = pdir_arr[0];
-
-    root_dir->pdentry = (pdentry_t *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, 0);
-    if(!root_dir->pdentry)
-        goto fail;
-
-    root_dir->flags[0] = 1;
-    root_dir->mode = root_mode | S_IFDIR;
-    root_dir->pdentry[0].ino = 513;
-    snprintf(root_dir->pdentry[0].name, MAX_ENTRY_NAME_SIZE, root_filename);
-
-    pfile_arr[0] = kmalloc(sizeof(pfile_t), GFP_KERNEL | __GFP_ZERO);
-    if(!pfile_arr[0])
-        goto fail;
-
-    root_file = pfile_arr[0];
-
-    root_file->pages[0] = (char *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, 0);
-    if(! root_file->pages[0])
+    root_file = get_pfile(file_ino);
+    page = get_page_from_pfile(root_file, 0);
+    if(!page)
         goto fail;
 
     root_file->size = strlen(root_content);
     if(root_file->size > 4096)
         root_file->size = 4096;
-    root_file->mode = root_mode | S_IFREG;
-    snprintf(root_file->pages[0], 4096, root_content);
+    snprintf(page, 4096, root_content);
 
-    // pr_alert("root file. ino: %d name: %s\n",
-    //     pdir_arr[0]->pdentry[0].ino, pdir_arr[0]->pdentry[0].name);
+
+    dir_ino = disk_create_pdir(root_mode);
+    if(!dir_ino)
+        goto fail;
+
+    root_dir = get_pdir(dir_ino);
+    //创建两个入口
+    root_file->nrlink = 2;
+    disk_create_pdentry(root_dir, file_ino, root_filename1);
+    disk_create_pdentry(root_dir, file_ino, root_filename2);      
+
     return 0;
 
     fail:

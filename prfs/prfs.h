@@ -33,18 +33,20 @@ typedef struct pfile {
     char *pages[MAX_FILE_PAGE];
     unsigned long size;
     umode_t mode;
+    unsigned int nrlink;
 } pfile_t;
 
-int disk_init(umode_t root_mode, const char *root_filename, const char *root_content);
+int disk_init(umode_t root_mode, const char *root_filename1, const char *root_filename2, const char *root_content);
 void disk_destroy(void);
 void pfile_pages_truncate(pfile_t *pfile);
 pdentry_t *disk_lookup(unsigned short ino, const char *name);
 unsigned short disk_create_pfile(umode_t mode);
 int disk_create_pdentry(pdir_t *pdir, unsigned short ino, const char *name);
 unsigned short disk_create_pdir(umode_t mode);
-void delete_pflie(unsigned short ino);
+void delete_pfile(unsigned short ino);
 void delete_pdentry(pdir_t *pdir, const char *name);
 void delete_pdir(unsigned short ino);
+void reino_pdentry(pdir_t *pdir, const char *name, unsigned short ino);
 
 pdir_t *get_pdir(unsigned short ino);
 pfile_t *get_pfile(unsigned short ino);
@@ -60,6 +62,7 @@ extern struct inode_operations file_inode_ops;
 extern struct dentry_operations dentry_ops;
 
 extern struct dentry *show_dentry;
+extern struct inode *show_inode;
 extern const struct proc_ops prfs_proc_ops;
 
 #endif
