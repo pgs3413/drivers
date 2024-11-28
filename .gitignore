@@ -15,3 +15,5 @@ receive_packet
 server
 client
 fs_test
+packeteth
+captureeth
