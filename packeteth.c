@@ -2,6 +2,7 @@
 
 int user_frame(struct ethhdr *hdr, char *data);
 int arp_frame(struct ethhdr *eth, struct arphdr *arp);
+int ip_frame(struct ethhdr *eth, struct iphdr *ip);
 
 int main()
 {
@@ -16,12 +17,12 @@ int main()
     int ifindex = get_ifindex(sockfd, dev);
     set_devaddr(&devaddr, ifindex, dev);
 
-    printf("choose mode: 1.user 2.ARP ");
+    printf("choose mode: 1.user 2.ARP 3.IP ");
     fflush(stdout);
     int mode;
     scanf("%d", &mode);
     getchar();
-    if(mode < 1 || mode > 2)
+    if(mode < 1 || mode > 3)
     {
         printf("wrong mode!\n");
         return 1;
@@ -33,11 +34,12 @@ int main()
     memcpy(hdr->h_source, dev->mac, 6);
 
     int datasize;
-    if(mode == 1)
-    {
+    if(mode == 1){
         datasize = user_frame(hdr, data);
     } else if(mode == 2) {
         datasize = arp_frame(hdr, (struct arphdr *)data);
+    } else if(mode == 3) {
+        datasize = ip_frame(hdr, (struct iphdr *)data);
     }
 
     ssize_t size = sendto(sockfd, frame, sizeof(struct ethhdr) + datasize, 0,
@@ -106,4 +108,62 @@ int arp_frame(struct ethhdr *eth, struct arphdr *arp)
     }
 
     return sizeof(struct arphdr) + 20;
+}
+
+// 计算 IP 头部检验和的函数
+uint16_t calculate_checksum(uint16_t *data, int length) 
+{
+    uint32_t sum = 0;
+
+    // 计算所有 16 位字节的和
+    while (length > 1) {
+        sum += *data++;
+        length -= 2;
+    }
+
+    // 如果剩下一个字节（奇数长度），添加到和中
+    if (length == 1) {
+        sum += *(uint8_t *)data;
+    }
+
+    // 将结果的高16位和低16位相加（如果有溢出）
+    sum = (sum >> 16) + (sum & 0xFFFF);
+    sum += (sum >> 16);
+
+    // 返回取反值作为最终的检验和
+    return ~sum;
+}
+
+int ip_frame(struct ethhdr *eth, struct iphdr *ip)
+{
+    input_macaddr("dest mac address: ", eth->h_dest);
+    eth->h_proto = htons(0x0800);
+
+    input_ip("src ip addr: ", (unsigned char *)&ip->saddr);
+    input_ip("dest ip addr: ", (unsigned char *)&ip->daddr);
+    printf("ip payload protocol: ");
+    fflush(stdout);
+    unsigned char protocol;
+    scanf("%hhu", &protocol);
+    getchar();
+    ip->protocol = protocol;
+
+    char *data = (unsigned char *)ip + 20;
+    printf("ip payload: ");
+    fflush(stdout);
+    scanf("%1000s", data);
+
+    ip->version = 4;
+    ip->ihl = 5;
+    ip->tos = 0;
+    ip->tot_len = htons(strlen(data) + 20);
+    ip->id = htons(0xabcd);
+    ip->frag_off = htons(0x4000);
+    ip->ttl = 64;
+    ip->check = 0;
+    ip->check = calculate_checksum((uint16_t *)ip, 20);
+
+    // printf("checksum: %d\n", calculate_checksum((uint16_t *)ip, 20));
+
+    return 20 + strlen(data);
 }

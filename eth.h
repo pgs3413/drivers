@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <net/if_arp.h>
+#include <netinet/ip.h>
 
 typedef struct {
     char name[IFNAMSIZ];
