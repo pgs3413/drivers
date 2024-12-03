@@ -1,13 +1,13 @@
 #ifndef ETH_H
 #define ETH_H
 
+#include <sys/socket.h>
 #include <ifaddrs.h>
 #include <stdio.h>
 #include <arpa/inet.h>
 #include <netpacket/packet.h>
 #include <string.h>
 #include <stdlib.h>
-#include <sys/socket.h>
 #include <netinet/if_ether.h>
 #include <net/ethernet.h>
 #include <sys/ioctl.h>
@@ -16,6 +16,47 @@
 #include <netinet/in.h>
 #include <net/if_arp.h>
 #include <netinet/ip.h>
+
+#ifndef __USE_MISC
+
+struct ifmap
+  {
+    unsigned long int mem_start;
+    unsigned long int mem_end;
+    unsigned short int base_addr;
+    unsigned char irq;
+    unsigned char dma;
+    unsigned char port;
+    /* 3 bytes spare */
+  };
+
+struct ifreq
+  {
+# define IFHWADDRLEN	6
+# define IFNAMSIZ	16
+    union
+      {
+	char ifrn_name[IFNAMSIZ];	/* Interface name, e.g. "en0".  */
+      } ifr_ifrn;
+
+    union
+      {
+	struct sockaddr ifru_addr;
+	struct sockaddr ifru_dstaddr;
+	struct sockaddr ifru_broadaddr;
+	struct sockaddr ifru_netmask;
+	struct sockaddr ifru_hwaddr;
+	short int ifru_flags;
+	int ifru_ivalue;
+	int ifru_mtu;
+	struct ifmap ifru_map;
+	char ifru_slave[IFNAMSIZ];	/* Just fits the size */
+	char ifru_newname[IFNAMSIZ];
+	__caddr_t ifru_data;
+      } ifr_ifru;
+  };
+
+#endif
 
 typedef struct {
     char name[IFNAMSIZ];
@@ -102,13 +143,13 @@ static int get_ifindex(int sockfd, netdev *dev)
 {
     struct ifreq ifindex;
     memset(&ifindex, 0, sizeof(struct ifreq));
-    strcpy(ifindex.ifr_name, dev->name);
+    strcpy(ifindex.ifr_ifrn.ifrn_name, dev->name);
     if(ioctl(sockfd, SIOCGIFINDEX, &ifindex) < 0)
     {
         perror("ifindex");
         exit(1);
     }
-    return ifindex.ifr_ifindex;
+    return ifindex.ifr_ifru.ifru_ivalue;
 }
 
 static void set_devaddr(struct sockaddr_ll *devaddr, int ifindex, netdev *dev)
@@ -162,6 +203,16 @@ static unsigned short input_proto(const char *msg)
         proto_s += ((a << 4) + b) << 8 * (k ^ 1); 
     }
     return proto_s;
+}
+
+static unsigned char input_ip_proto(const char *msg)
+{
+    printf("%s", msg);
+    fflush(stdout);
+    unsigned char protocol;
+    scanf("%hhu", &protocol);
+    getchar();
+    return protocol;
 }
 
 static void input_ip(const char *msg, unsigned char *dest)
