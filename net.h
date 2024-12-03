@@ -1,8 +1,6 @@
 #ifndef ETH_H
 #define ETH_H
 
-#define _GNU_SOURCE
-
 #include <ifaddrs.h>
 #include <stdio.h>
 #include <arpa/inet.h>
@@ -189,4 +187,30 @@ static void convert_ip(char *buf, unsigned char *ip)
         exit(1);
     }
 }
+
+// 计算 IP 头部检验和的函数
+static uint16_t calculate_checksum(void *target, int length) 
+{
+    uint32_t sum = 0;
+    uint16_t *data = (uint16_t *)target;
+
+    // 计算所有 16 位字节的和
+    while (length > 1) {
+        sum += *data++;
+        length -= 2;
+    }
+
+    // 如果剩下一个字节（奇数长度），添加到和中
+    if (length == 1) {
+        sum += *(uint8_t *)data;
+    }
+
+    // 将结果的高16位和低16位相加（如果有溢出）
+    sum = (sum >> 16) + (sum & 0xFFFF);
+    sum += (sum >> 16);
+
+    // 返回取反值作为最终的检验和
+    return ~sum;
+}
+
 #endif

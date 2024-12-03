@@ -1,4 +1,4 @@
-#include "eth.h"
+#include "net.h"
 
 int user_frame(struct ethhdr *hdr, char *data);
 int arp_frame(struct ethhdr *eth, struct arphdr *arp);
@@ -110,30 +110,6 @@ int arp_frame(struct ethhdr *eth, struct arphdr *arp)
     return sizeof(struct arphdr) + 20;
 }
 
-// 计算 IP 头部检验和的函数
-uint16_t calculate_checksum(uint16_t *data, int length) 
-{
-    uint32_t sum = 0;
-
-    // 计算所有 16 位字节的和
-    while (length > 1) {
-        sum += *data++;
-        length -= 2;
-    }
-
-    // 如果剩下一个字节（奇数长度），添加到和中
-    if (length == 1) {
-        sum += *(uint8_t *)data;
-    }
-
-    // 将结果的高16位和低16位相加（如果有溢出）
-    sum = (sum >> 16) + (sum & 0xFFFF);
-    sum += (sum >> 16);
-
-    // 返回取反值作为最终的检验和
-    return ~sum;
-}
-
 int ip_frame(struct ethhdr *eth, struct iphdr *ip)
 {
     input_macaddr("dest mac address: ", eth->h_dest);
@@ -161,9 +137,7 @@ int ip_frame(struct ethhdr *eth, struct iphdr *ip)
     ip->frag_off = htons(0x4000);
     ip->ttl = 64;
     ip->check = 0;
-    ip->check = calculate_checksum((uint16_t *)ip, 20);
-
-    // printf("checksum: %d\n", calculate_checksum((uint16_t *)ip, 20));
+    ip->check = calculate_checksum(ip, 20);
 
     return 20 + strlen(data);
 }

@@ -1,4 +1,4 @@
-#include "eth.h"
+#include "net.h"
 
 void user_frame(char *frame, int size);
 void arp_frame(char *frame, int size);
