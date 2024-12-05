@@ -16,6 +16,7 @@
 #include <netinet/in.h>
 #include <net/if_arp.h>
 #include <netinet/ip.h>
+#include <netinet/ip_icmp.h>
 
 #ifndef __USE_MISC
 
