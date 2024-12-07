@@ -1,20 +1,9 @@
 #include "net.h"
 
-int ping()
+int ping(char *packet, struct sockaddr_in *dest)
 {
-    int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-    if(sockfd < 0)
-    {
-        perror("socket raw");
-        exit(1);
-    }
+    input_ip("dest ip: ", (unsigned char *)&(dest->sin_addr.s_addr));
 
-    struct sockaddr_in dest;
-    dest.sin_family = AF_INET;
-    input_ip("dest ip: ", (unsigned char *)&dest.sin_addr.s_addr);
-
-    char *packet = malloc(4096);
-    memset(packet, 0, 4096);
     struct icmphdr *icmp = (struct icmphdr *)packet;
     char *data = packet + sizeof(struct icmphdr);
 
@@ -31,32 +20,13 @@ int ping()
 
     icmp->checksum = calculate_checksum(packet, sizeof(struct icmphdr) + datasize);
 
-    int size = sendto(sockfd, packet, sizeof(struct icmphdr) + datasize, 0, 
-        (struct sockaddr *)&dest, sizeof(struct sockaddr_in));
-    if(size < 0)
-    {
-        perror("sendto");
-        exit(1);
-    }
-
-    return size;
+    return sizeof(struct icmphdr) + datasize;
 }
 
-int user_ip()
+int user_ip(char *packet, struct sockaddr_in *dest)
 {
-
-    int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-    if(sockfd < 0)
-    {
-        perror("socket raw");
-        exit(1);
-    }
-
-    char *packet = malloc(4096);
-    memset(packet, 0, 4096);
     struct iphdr *ip = (struct iphdr *)packet;
     char *data = packet + sizeof(struct iphdr);
-    struct sockaddr_in dest;
 
     input_ip("src ip: ", (unsigned char *)&ip->saddr);
     input_ip("dest ip: ", (unsigned char *)&ip->daddr);
@@ -76,21 +46,12 @@ int user_ip()
     ip->check = 0;
     ip->check = calculate_checksum(ip, 20);
 
-    dest.sin_family = AF_INET;
-    dest.sin_addr.s_addr = ip->daddr; 
+    dest->sin_addr.s_addr = ip->daddr; 
 
-    int size = sendto(sockfd, packet, sizeof(struct iphdr) + strlen(data), 0, 
-        (struct sockaddr *)&dest, sizeof(struct sockaddr_in));
-    if(size < 0)
-    {
-        perror("sendto");
-        exit(1);
-    }
-
-    return size;
+    return sizeof(struct iphdr) + strlen(data);
 }
 
-int main()
+int main(int argc, char *argv[])
 {
 
     printf("choose mode: 1.user 2.ICMP(ping) ");
@@ -104,11 +65,37 @@ int main()
         return 1;
     }
 
-    int size;
+    int sockfd, size;
+    struct sockaddr_in dest;
+    dest.sin_family = AF_INET;
+    char *packet = malloc(4096);
+    memset(packet, 0, 4096);
+
     if(mode == 1){
-        size = user_ip();
+        sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+        size = user_ip(packet, &dest);
     } else if(mode == 2) {
-        size = ping();
+        sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+        size = ping(packet, &dest);
+    }
+
+    if(sockfd < 0)
+    {
+        perror("socket");
+        exit(1);
+    }
+
+    if(argc >= 2 || strcmp(argv[1], "b") == 0)
+    {
+        int enable = 1;
+        setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &enable, sizeof(enable));
+    }
+
+    size = sendto(sockfd, packet, size, 0, (struct sockaddr *)&dest, sizeof(struct sockaddr_in));
+    if(size < 0)
+    {
+        perror("sendto");
+        exit(1);
     }
 
     printf("sent successfully(%d bytes)!\n", size);
