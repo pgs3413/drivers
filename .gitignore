@@ -19,3 +19,4 @@ packeteth
 captureeth
 ip_packet
 ip_capture
+multicast
