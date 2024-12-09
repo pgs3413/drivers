@@ -64,7 +64,7 @@ int udp_ip (char *packet, struct sockaddr_in *dest)
 
     printf("data: ");
     fflush(stdout);
-    scanf("%1000s", data);
+    scanf("%3000s", data);
     int datasize = strlen(data);
     int len = sizeof(struct udphdr) + datasize;
 
