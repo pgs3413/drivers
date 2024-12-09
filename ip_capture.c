@@ -15,6 +15,18 @@ void icmp(struct icmphdr *icmp, int size)
     printf("  data: %s\n", data);
 }
 
+void udp(struct udphdr *udp, int size)
+{
+    printf("  src port: %d\n", ntohs(udp->source));
+    printf("  dest port: %d\n", ntohs(udp->dest));
+    printf("  len: %d\n", ntohs(udp->len));
+
+    char *data = (char *)udp + sizeof(struct udphdr);
+    size = size - sizeof(struct udphdr);
+    data[size] = '\0';
+     printf("  data: %s\n", data);
+}
+
 int main(){
 
     uint32_t target;
@@ -25,7 +37,7 @@ int main(){
     int mode;
     scanf("%d", &mode);
     getchar();
-    if(mode < 1 || mode > 1)
+    if(mode < 1 || mode > 2)
     {
         printf("wrong mode!\n");
         return 1;
@@ -33,9 +45,10 @@ int main(){
 
     int sockfd;
 
-    if(mode == 1)
-    {
+    if(mode == 1) {
         sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+    } else if(mode == 2) {
+        sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
     }
 
     if(sockfd < 0)
@@ -68,9 +81,10 @@ int main(){
         convert_ip(ipbuf, ( unsigned char *)&ip->daddr);
         printf("  dest ip: %s\n", ipbuf);
 
-        if(mode == 1)
-        {
+        if(mode == 1) {
             icmp((struct icmphdr *)data, size - sizeof(struct iphdr));
+        } else if(mode == 2) {
+            udp((struct udphdr *)data, size - sizeof(struct iphdr));
         }
 
     }

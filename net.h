@@ -17,6 +17,7 @@
 #include <net/if_arp.h>
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
+#include <netinet/udp.h>
 
 #ifndef __USE_MISC
 
@@ -229,6 +230,16 @@ static void input_ip(const char *msg, unsigned char *dest)
         printf("wrong ip.\n");
         exit(1);
     }
+}
+
+unsigned short input_port(const char *msg)
+{
+    printf("%s", msg);
+    fflush(stdout);
+    unsigned short port;
+    scanf("%hu", &port);
+    getchar();
+    return htons(port);
 }
 
 static void convert_ip(char *buf, unsigned char *ip)

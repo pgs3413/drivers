@@ -51,15 +51,36 @@ int user_ip(char *packet, struct sockaddr_in *dest)
     return sizeof(struct iphdr) + strlen(data);
 }
 
+int udp_ip (char *packet, struct sockaddr_in *dest)
+{
+    input_ip("dest ip: ", (unsigned char *)&(dest->sin_addr.s_addr));
+
+    struct udphdr *udp = (struct udphdr *)packet;
+    char *data = packet + sizeof(struct udphdr);
+
+    udp->source = input_port("src port: ");
+    udp->dest = input_port("dest port: ");
+    udp->check = 0;
+
+    printf("data: ");
+    fflush(stdout);
+    scanf("%1000s", data);
+    int datasize = strlen(data);
+    int len = sizeof(struct udphdr) + datasize;
+
+    udp->len = htons(len);
+    return len;
+}
+
 int main(int argc, char *argv[])
 {
 
-    printf("choose mode: 1.user 2.ICMP(ping) ");
+    printf("choose mode: 1.user 2.ICMP(ping) 3.UDP ");
     fflush(stdout);
     int mode;
     scanf("%d", &mode);
     getchar();
-    if(mode < 1 || mode > 2)
+    if(mode < 1 || mode > 3)
     {
         printf("wrong mode!\n");
         return 1;
@@ -71,12 +92,15 @@ int main(int argc, char *argv[])
     char *packet = malloc(4096);
     memset(packet, 0, 4096);
 
-    if(mode == 1){
+    if(mode == 1) {
         sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
         size = user_ip(packet, &dest);
     } else if(mode == 2) {
         sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
         size = ping(packet, &dest);
+    } else if(mode == 3) {
+        sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
+        size = udp_ip(packet, &dest);
     }
 
     if(sockfd < 0)
@@ -85,7 +109,7 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    if(argc >= 2 || strcmp(argv[1], "b") == 0)
+    if(argc >= 2 && strcmp(argv[1], "b") == 0)
     {
         int enable = 1;
         setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &enable, sizeof(enable));
