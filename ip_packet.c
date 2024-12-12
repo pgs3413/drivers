@@ -51,7 +51,7 @@ int user_ip(char *packet, struct sockaddr_in *dest)
     return sizeof(struct iphdr) + strlen(data);
 }
 
-int udp_ip (char *packet, struct sockaddr_in *dest)
+int udp_ip(char *packet, struct sockaddr_in *dest)
 {
     input_ip("dest ip: ", (unsigned char *)&(dest->sin_addr.s_addr));
 
@@ -72,15 +72,73 @@ int udp_ip (char *packet, struct sockaddr_in *dest)
     return len;
 }
 
+struct pseudo_buf {
+    unsigned int src_addr;
+    unsigned int dest_addr;
+    unsigned char placeholder;
+    unsigned char protocol;
+    unsigned short tcp_length;
+    struct tcphdr tcp;
+    char data[100];
+};
+
+int tcp_ip(char *packet, struct sockaddr_in *dest)
+{
+
+    struct pseudo_buf pseudo_buf;
+    
+    input_ip("src ip: ", (unsigned char *)&pseudo_buf.src_addr);
+    input_ip("dest ip: ", (unsigned char *)&(dest->sin_addr.s_addr));
+    pseudo_buf.dest_addr = dest->sin_addr.s_addr;
+    pseudo_buf.placeholder = 0;
+    pseudo_buf.protocol = 6;
+
+    struct tcphdr *tcp = (struct tcphdr *)packet;
+    char *data = packet + sizeof(struct tcphdr);
+
+    tcp->source = input_port("src port: ");
+    tcp->dest = input_port("dest port: ");
+    tcp->seq = input_nint32("seq num: ");
+    tcp->ack_seq = input_nint32("ack num: ");
+    tcp->doff = 5;
+    if(true_of_false("SYN: "))
+        tcp->syn = 1;
+    if(true_of_false("FIN: "))
+        tcp->fin = 1;
+    if(true_of_false("ACK: "))
+        tcp->ack = 1;
+    tcp->window = htons(64240);
+    tcp->check = 0;
+    tcp->urg_ptr = 0;
+
+    memcpy(&pseudo_buf.tcp, tcp, sizeof(struct tcphdr));
+
+    int datasize = 0;
+    if(true_of_false("has data?: "))
+    {
+        printf("data: ");
+        fflush(stdout);
+        scanf("%100s", data);
+        datasize = strlen(data);
+        memcpy(pseudo_buf.data, data, datasize);
+    }
+    int len = sizeof(struct tcphdr) + datasize;
+
+    pseudo_buf.tcp_length = htons(len);
+    tcp->check = calculate_checksum(&pseudo_buf, 12 + len);
+
+    return len;
+}
+
 int main(int argc, char *argv[])
 {
 
-    printf("choose mode: 1.user 2.ICMP(ping) 3.UDP ");
+    printf("choose mode: 1.user 2.ICMP(ping) 3.UDP 4.TCP ");
     fflush(stdout);
     int mode;
     scanf("%d", &mode);
     getchar();
-    if(mode < 1 || mode > 3)
+    if(mode < 1 || mode > 4)
     {
         printf("wrong mode!\n");
         return 1;
@@ -101,6 +159,9 @@ int main(int argc, char *argv[])
     } else if(mode == 3) {
         sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
         size = udp_ip(packet, &dest);
+    } else if(mode == 4) {
+        sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
+        size = tcp_ip(packet, &dest);
     }
 
     if(sockfd < 0)

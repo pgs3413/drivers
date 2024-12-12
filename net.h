@@ -18,6 +18,7 @@
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 #include <netinet/udp.h>
+#include <netinet/tcp.h>
 
 #ifndef __USE_MISC
 
@@ -57,6 +58,76 @@ struct ifreq
 	__caddr_t ifru_data;
       } ifr_ifru;
   };
+
+typedef	uint32_t tcp_seq;
+/*
+ * TCP header.
+ * Per RFC 793, September, 1981.
+ */
+struct tcphdr
+  {
+    __extension__ union
+    {
+      struct
+      {
+	uint16_t th_sport;	/* source port */
+	uint16_t th_dport;	/* destination port */
+	tcp_seq th_seq;		/* sequence number */
+	tcp_seq th_ack;		/* acknowledgement number */
+# if __BYTE_ORDER == __LITTLE_ENDIAN
+	uint8_t th_x2:4;	/* (unused) */
+	uint8_t th_off:4;	/* data offset */
+# endif
+# if __BYTE_ORDER == __BIG_ENDIAN
+	uint8_t th_off:4;	/* data offset */
+	uint8_t th_x2:4;	/* (unused) */
+# endif
+	uint8_t th_flags;
+# define TH_FIN	0x01
+# define TH_SYN	0x02
+# define TH_RST	0x04
+# define TH_PUSH	0x08
+# define TH_ACK	0x10
+# define TH_URG	0x20
+	uint16_t th_win;	/* window */
+	uint16_t th_sum;	/* checksum */
+	uint16_t th_urp;	/* urgent pointer */
+      };
+      struct
+      {
+	uint16_t source;
+	uint16_t dest;
+	uint32_t seq;
+	uint32_t ack_seq;
+# if __BYTE_ORDER == __LITTLE_ENDIAN
+	uint16_t res1:4;
+	uint16_t doff:4;
+	uint16_t fin:1;
+	uint16_t syn:1;
+	uint16_t rst:1;
+	uint16_t psh:1;
+	uint16_t ack:1;
+	uint16_t urg:1;
+	uint16_t res2:2;
+# elif __BYTE_ORDER == __BIG_ENDIAN
+	uint16_t doff:4;
+	uint16_t res1:4;
+	uint16_t res2:2;
+	uint16_t urg:1;
+	uint16_t ack:1;
+	uint16_t psh:1;
+	uint16_t rst:1;
+	uint16_t syn:1;
+	uint16_t fin:1;
+# else
+#  error "Adjust your <bits/endian.h> defines"
+# endif
+	uint16_t window;
+	uint16_t check;
+	uint16_t urg_ptr;
+      };
+    };
+};
 
 #endif
 
@@ -240,6 +311,26 @@ unsigned short input_port(const char *msg)
     scanf("%hu", &port);
     getchar();
     return htons(port);
+}
+
+uint32_t input_nint32(const char *msg)
+{
+    printf("%s", msg);
+    fflush(stdout);
+    uint32_t num;
+    scanf("%u", &num);
+    getchar();
+    return htonl(num);
+}
+
+int true_of_false(const char *msg)
+{
+    printf("%s", msg);
+    fflush(stdout);
+    int ret;
+    scanf("%d", &ret);
+    getchar();
+    return ret;
 }
 
 static void convert_ip(char *buf, unsigned char *ip)
