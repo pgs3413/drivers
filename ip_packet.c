@@ -79,7 +79,7 @@ struct pseudo_buf {
     unsigned char protocol;
     unsigned short tcp_length;
     struct tcphdr tcp;
-    char data[100];
+    char data[200];
 };
 
 int tcp_ip(char *packet, struct sockaddr_in *dest)
@@ -94,7 +94,10 @@ int tcp_ip(char *packet, struct sockaddr_in *dest)
     pseudo_buf.protocol = 6;
 
     struct tcphdr *tcp = (struct tcphdr *)packet;
-    char *data = packet + sizeof(struct tcphdr);
+    char *data_start = packet + sizeof(struct tcphdr);
+    char *data = data_start;
+    int optionsize = 0;
+    int datasize = 0;
 
     tcp->source = input_port("src port: ");
     tcp->dest = input_port("dest port: ");
@@ -102,27 +105,43 @@ int tcp_ip(char *packet, struct sockaddr_in *dest)
     tcp->ack_seq = input_nint32("ack num: ");
     tcp->doff = 5;
     if(true_of_false("SYN: "))
+    {
         tcp->syn = 1;
+        //NOHUP + NOHUP + SACK PERMITTED
+        memcpy(data, "\x01\x01\x04\x02", 4);
+        data += 4;
+        //MSS
+        memcpy(data, "\x02\x04", 2);
+        data += 2;
+        *((unsigned short *)data) = htons(600);
+        data += 2;
+        optionsize += 8;
+        tcp->doff += 2;
+    }
     if(true_of_false("FIN: "))
         tcp->fin = 1;
     if(true_of_false("ACK: "))
         tcp->ack = 1;
+    if(true_of_false("RST: "))
+        tcp->rst = 1;
     tcp->window = htons(64240);
     tcp->check = 0;
     tcp->urg_ptr = 0;
 
     memcpy(&pseudo_buf.tcp, tcp, sizeof(struct tcphdr));
 
-    int datasize = 0;
     if(true_of_false("has data?: "))
     {
         printf("data: ");
         fflush(stdout);
         scanf("%100s", data);
         datasize = strlen(data);
-        memcpy(pseudo_buf.data, data, datasize);
     }
-    int len = sizeof(struct tcphdr) + datasize;
+
+    if(optionsize + datasize > 0)
+        memcpy(pseudo_buf.data, data_start, optionsize + datasize);
+
+    int len = sizeof(struct tcphdr) + optionsize + datasize;
 
     pseudo_buf.tcp_length = htons(len);
     tcp->check = calculate_checksum(&pseudo_buf, 12 + len);
